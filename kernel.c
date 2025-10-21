@@ -1,0 +1,135 @@
+#include "kernel.h"
+#include "console.h"
+#include "keyboard.h"
+#include "string.h"
+
+void print_banner() {
+    console_clear();
+
+    console_set_color(VGA_COLOR_LIGHT_BLUE);
+    console_print("+------------------------------------------------------------------------------+\n");
+
+    console_set_color(VGA_COLOR_LIGHT_GREEN);
+    console_print("         ___         __   ____   ____        \n");
+    console_print("        / _ |  ___ _/ /  / __/  / __/        \n");
+    console_print("       / __ | / _ `/ /  _\\ \   _\\ \         \n");
+    console_print("      /_/ |_| \\\_,_/_/  /___/  /___/         \n");
+    console_print("             A x O S   K e r n e l            \n");
+
+    console_set_color(VGA_COLOR_LIGHT_BLUE);
+    console_print("+------------------------------------------------------------------------------+\n");
+
+    console_set_color(VGA_COLOR_LIGHT_GREY);
+    console_print("Welcome to AxOS!\n");
+    console_print("Type 'help' for available commands.\n");
+    console_print("Use 'clear' to redraw this start screen.\n\n");
+}
+
+void kernel_main() __attribute__((externally_visible));
+void kernel_main() {
+    console_init();
+    keyboard_init();
+    print_banner();
+    console_print("> ");
+    
+    command_loop();
+}
+
+void command_loop() {
+    char buffer[128];
+    int len = 0;
+    while (1) {
+        char c = keyboard_getchar();
+        if (c == '\r' || c == '\n') {
+            console_print("\n");
+            buffer[len] = '\0';
+            process_command(buffer);
+            len = 0;
+            console_print("> ");
+        } else if (c == '\b') {
+            if (len > 0) {
+                len--; 
+                console_putchar('\b');
+            }
+        } else {
+            if (len < (int)sizeof(buffer) - 1) {
+                buffer[len++] = c;
+                console_putchar(c);
+            }
+        }
+    }
+}
+
+void process_command(const char* cmd) {
+    if (strlen(cmd) == 0) {
+        return;
+    }
+    if (strcmp(cmd, "help") == 0) {
+        show_help();
+    } else if (strcmp(cmd, "version") == 0) {
+        show_version();
+    } else if (strcmp(cmd, "about") == 0) {
+        show_about();
+    } else if (strcmp(cmd, "clear") == 0) {
+        console_clear();
+        print_banner();
+    } else if (strcmp(cmd, "ping") == 0) {
+        ping_command();
+    } else {
+        console_print("Unknown command. Type 'help'\n");
+    }
+}
+
+void show_help() {
+    console_print("Available commands:\n");
+    console_print("  help     - show this help\n");
+    console_print("  version  - show kernel version\n");
+    console_print("  about    - show info\n");
+    console_print("  clear    - clear screen\n");
+    console_print("  ping     - test command\n");
+}
+
+void show_version() {
+    console_print("AxOS v0.1 (demo)\n");
+}
+
+void show_about() {
+    console_print("AxOS: simple x86 hobby OS demo\n");
+}
+
+void ping_command() {
+    console_print("PONG\n");
+}
+
+void simple_keyboard_test() {
+    console_print("Keyboard test: press any key (ESC to exit)\n");
+    
+    while (1) {
+        if (inb(0x64) & 1) {
+            uint8_t scancode = inb(0x60);
+            
+            if (!(scancode & 0x80)) {
+                console_print("Key pressed: scancode ");
+                console_print_hex(scancode);
+                console_print("\n");
+                
+                if (scancode == 0x01) {
+                    console_print("ESC pressed, exiting...\n");
+                    break;
+                }
+            }
+        }
+        
+        for (volatile int i = 0; i < 100000; i++) {
+            __asm__("nop");
+        }
+    }
+    
+    console_print("Keyboard test finished.\n");
+}
+
+void delay(int ms) {
+    for (volatile int i = 0; i < ms * 10000; i++) {
+        __asm__("nop");
+    }
+}
