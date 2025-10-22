@@ -67,6 +67,7 @@ void command_loop() {
     }
 }
 
+static void vim_editor(const char* name);
 void process_command(const char* cmd) {
     if (strlen(cmd) == 0) {
         return;
@@ -109,6 +110,16 @@ void process_command(const char* cmd) {
                 console_print("not found\n");
             }
         }
+    } else if ((strlen(cmd) > 3) && cmd[0]=='v' && cmd[1]=='i' && cmd[2]=='m' && (cmd[3]==' ' || cmd[3]=='\t')) {
+        const char* name = cmd + 4; while (*name==' '||*name=='\t') name++;
+        char fname[64]; int i=0; while(name[i] && name[i]!=' ' && name[i]!='\t'){ if(i<63){fname[i]=name[i]; i++;} else break; } fname[i]='\0';
+        if(i==0){ console_print("usage: vim NAME\n"); }
+        else { vim_editor(fname); }
+    } else if ((strlen(cmd) > 5) && cmd[0]=='t' && cmd[1]=='o' && cmd[2]=='u' && cmd[3]=='c' && cmd[4]=='h' && (cmd[5]==' ' || cmd[5]=='\t')) {
+        const char* name = cmd + 6; while (*name==' '||*name=='\t') name++;
+        char fname[64]; int i=0; while(name[i] && name[i]!=' ' && name[i]!='\t'){ if(i<63){fname[i]=name[i]; i++;} else break; } fname[i]='\0';
+        if(i==0){ console_print("usage: touch NAME\n"); }
+        else { VfsFile nf; if(vfs_create(&g_vfs,fname,0,&nf)) console_print("created\n"); else console_print("create failed\n"); }
     } else {
         console_print("Unknown command. Type 'help'\n");
     }
@@ -116,13 +127,15 @@ void process_command(const char* cmd) {
 
 void show_help() {
     console_print("Available commands:\n");
-    console_print("  help     - show this help\n");
-    console_print("  version  - show kernel version\n");
-    console_print("  about    - show info\n");
-    console_print("  clear    - clear screen\n");
-    console_print("  ping     - test command\n");
-    console_print("  ls       - list files in root\n");
-    console_print("  cat NAME - show file contents\n");
+    console_print("  help       - show this help\n");
+    console_print("  version    - show kernel version\n");
+    console_print("  about      - show info\n");
+    console_print("  clear      - clear screen\n");
+    console_print("  ping       - test command\n");
+    console_print("  ls         - list files in root\n");
+    console_print("  cat NAME   - show file contents\n");
+    console_print("  touch NAME - create empty file\n");
+    console_print("  vim NAME   - edit/create file (I: insert, ESC: save+quit)\n");
 }
 
 void show_version() {
@@ -167,5 +180,40 @@ void simple_keyboard_test() {
 void delay(int ms) {
     for (volatile int i = 0; i < ms * 10000; i++) {
         __asm__("nop");
+    }
+}
+
+static void vim_editor(const char* name){
+    static char buf[32768];
+    uint32_t len=0;
+    VfsFile f;
+    console_clear();
+    console_set_color(VGA_COLOR_LIGHT_BLUE);
+    console_print("+------------------------- AxOS VIM --------------------------+\n");
+    console_set_color(VGA_COLOR_LIGHT_GREY);
+    if(vfs_open(&g_vfs,name,&f)){
+        uint32_t sz=f.file.size; if(sz>sizeof(buf)) sz=sizeof(buf);
+        if(vfs_read(&g_vfs,&f,buf,sz)) { len=sz; for(uint32_t i=0;i<len;i++) console_putchar(buf[i]); }
+    }
+    console_print("\n[Normal] Press I to insert, ESC to save+quit\n");
+    int insert=0; int esc_once=0;
+    while(1){
+        char c = keyboard_getchar();
+        if(!insert){
+            if(c=='I' || c=='i'){ insert=1; esc_once=0; console_print("-- INSERT --\n"); continue; }
+            if(c==27){ if(esc_once){ // save and exit
+                    if(!vfs_write_file(&g_vfs,name,buf,len)) console_print("save error\n");
+                    console_set_color(VGA_COLOR_LIGHT_BLUE);
+                    console_print("\n+--------------------------- Saved ----------------------------+\n");
+                    return;
+                } else { esc_once=1; console_print("(ESC)\n"); }
+                continue;
+            }
+            esc_once=0; // other keys ignored in normal mode
+        } else {
+            if(c==27){ insert=0; console_print("\n-- NORMAL --\n"); continue; }
+            if(c=='\b'){ if(len>0){ len--; console_putchar('\b'); } continue; }
+            if(len<sizeof(buf)-1){ buf[len++]=c; console_putchar(c);} 
+        }
     }
 }

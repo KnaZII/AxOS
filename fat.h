@@ -7,5 +7,7 @@ typedef struct {uint32_t start_cluster;uint32_t size;} FatFile;
 int fat_mount(FatFs* fs);
 int fat_find(FatFs* fs,const char* name,FatFile* file);
 int fat_read_file(FatFs* fs,const FatFile* file,void* buf,uint32_t size);
+int fat_write_file(FatFs* fs,const FatFile* file,const void* buf,uint32_t size);
+int fat_create_or_overwrite(FatFs* fs,const char* name,uint32_t size,FatFile* file);
 int fat_list_root(FatFs* fs);
 #endif
