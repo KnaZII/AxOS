@@ -11,7 +11,7 @@ ASFLAGS = -f elf32
 LDFLAGS = -T linker.ld -nostdlib
 
 # Исходные файлы
-C_SOURCES = kernel.c console.c keyboard.c string.c
+C_SOURCES = kernel.c console.c keyboard.c string.c serial.c vfs.c fat.c disk.c
 ASM_SOURCES = kernel_entry.asm
 BOOT_SOURCE = boot.asm
 
@@ -53,7 +53,7 @@ $(BOOT_OBJECT): $(BOOT_SOURCE)
 # Запуск в QEMU
 run: axos.img
 	@echo "Starting AxOS in QEMU..."
-	"C:\Program Files\qemu\qemu-system-i386.exe" -drive format=raw,file=axos.img,if=floppy
+	"C:\Program Files\qemu\qemu-system-i386.exe" -boot a -drive format=raw,file=axos.img,if=floppy -drive format=raw,file=fs.img,if=ide
 
 # Запуск в QEMU с отладкой
 debug: axos.img

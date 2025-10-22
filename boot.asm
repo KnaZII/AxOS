@@ -9,6 +9,7 @@ start:
     mov sp, 0x7C00
     
     mov [boot_drive], dl
+    mov [0x0500], dl
     
     mov ah, 0x00
     mov al, 0x03

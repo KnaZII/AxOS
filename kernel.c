@@ -2,6 +2,11 @@
 #include "console.h"
 #include "keyboard.h"
 #include "string.h"
+#include "serial.h"
+#include "fat.h"
+#include "vfs.h"
+static FatFs g_fat;
+static Vfs g_vfs;
 
 void print_banner() {
     console_clear();
@@ -29,9 +34,11 @@ void kernel_main() __attribute__((externally_visible));
 void kernel_main() {
     console_init();
     keyboard_init();
+    serial_init();
+    fat_mount(&g_fat);
+    vfs_init_fat(&g_vfs, &g_fat);
     print_banner();
     console_print("> ");
-    
     command_loop();
 }
 
@@ -75,6 +82,33 @@ void process_command(const char* cmd) {
         print_banner();
     } else if (strcmp(cmd, "ping") == 0) {
         ping_command();
+    } else if (strcmp(cmd, "ls") == 0) {
+        vfs_ls_root(&g_vfs);
+    } else if ((strlen(cmd) > 3) && cmd[0]=='c' && cmd[1]=='a' && cmd[2]=='t' && (cmd[3]==' ' || cmd[3]=='\t')) {
+        const char* name = cmd + 4;
+        while (*name==' ' || *name=='\t') name++;
+        char fname[64];
+        int i = 0;
+        while (name[i] && name[i] != ' ' && name[i] != '\t') { if (i<63) { fname[i] = name[i]; i++; } else { break; } }
+        fname[i] = '\0';
+        if (i == 0) {
+            console_print("usage: cat NAME\n");
+        } else {
+            VfsFile f;
+            if (vfs_open(&g_vfs, fname, &f)) {
+                static char buf[32768];
+                uint32_t sz = f.file.size;
+                if (sz > sizeof(buf)) sz = sizeof(buf);
+                if (vfs_read(&g_vfs, &f, buf, sz)) {
+                    for (uint32_t j = 0; j < sz; j++) console_putchar(buf[j]);
+                    console_print("\n");
+                } else {
+                    console_print("read error\n");
+                }
+            } else {
+                console_print("not found\n");
+            }
+        }
     } else {
         console_print("Unknown command. Type 'help'\n");
     }
@@ -87,6 +121,8 @@ void show_help() {
     console_print("  about    - show info\n");
     console_print("  clear    - clear screen\n");
     console_print("  ping     - test command\n");
+    console_print("  ls       - list files in root\n");
+    console_print("  cat NAME - show file contents\n");
 }
 
 void show_version() {
