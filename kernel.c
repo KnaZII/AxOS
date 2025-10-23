@@ -5,8 +5,20 @@
 #include "serial.h"
 #include "fat.h"
 #include "vfs.h"
+#include "idt.h"
+#include "pic.h"
+#include "pit.h"
+#include "task.h"
+#include "paging.h"
+
+// Включение/отключение демонстрационных задач [T1]/[T2]
+#define ENABLE_DEMO_TASKS 0
+
 static FatFs g_fat;
 static Vfs g_vfs;
+
+static void vim_editor(const char* name);
+void process_command(const char* cmd);
 
 void print_banner() {
     console_clear();
@@ -17,8 +29,8 @@ void print_banner() {
     console_set_color(VGA_COLOR_LIGHT_GREEN);
     console_print("         ___         __   ____   ____        \n");
     console_print("        / _ |  ___ _/ /  / __/  / __/        \n");
-    console_print("       / __ | / _ `/ /  _\\ \   _\\ \         \n");
-    console_print("      /_/ |_| \\\_,_/_/  /___/  /___/         \n");
+    console_print("       / __ | / _ `/ /  _\\ \\   _\\ \\         \n");
+    console_print("      /_/ |_| \\_,_/_/  /___/  /___/         \n");
     console_print("             A x O S   K e r n e l            \n");
 
     console_set_color(VGA_COLOR_LIGHT_BLUE);
@@ -35,11 +47,45 @@ void kernel_main() {
     console_init();
     keyboard_init();
     serial_init();
+
+    // Инициализация системных таблиц и прерываний
+    idt_init();
+    pic_remap();
+    pit_init(100); // 100 Гц
+    paging_init();
+    task_init();
+    task_register_kernel();
+
+    // Создаём две демонстрационные задачи (по желанию)
+#if ENABLE_DEMO_TASKS
+    extern void task_demo1();
+    extern void task_demo2();
+    task_create(task_demo1);
+    task_create(task_demo2);
+#endif
+
+    __asm__ volatile("sti"); // включить прерывания
+
     fat_mount(&g_fat);
     vfs_init_fat(&g_vfs, &g_fat);
     print_banner();
     console_print("> ");
     command_loop();
+}
+
+// Демонстрационные задачи ядра
+void task_demo1(){
+    while(1){
+        console_print("[T1]\n");
+        task_sleep_ms(500); // 0.5 секунды
+    }
+}
+
+void task_demo2(){
+    while(1){
+        console_print("[T2]\n");
+        task_sleep_ms(1000); // 1 секунда
+    }
 }
 
 void command_loop() {
@@ -64,64 +110,6 @@ void command_loop() {
                 console_putchar(c);
             }
         }
-    }
-}
-
-static void vim_editor(const char* name);
-void process_command(const char* cmd) {
-    if (strlen(cmd) == 0) {
-        return;
-    }
-    if (strcmp(cmd, "help") == 0) {
-        show_help();
-    } else if (strcmp(cmd, "version") == 0) {
-        show_version();
-    } else if (strcmp(cmd, "about") == 0) {
-        show_about();
-    } else if (strcmp(cmd, "clear") == 0) {
-        console_clear();
-        print_banner();
-    } else if (strcmp(cmd, "ping") == 0) {
-        ping_command();
-    } else if (strcmp(cmd, "ls") == 0) {
-        vfs_ls_root(&g_vfs);
-    } else if ((strlen(cmd) > 3) && cmd[0]=='c' && cmd[1]=='a' && cmd[2]=='t' && (cmd[3]==' ' || cmd[3]=='\t')) {
-        const char* name = cmd + 4;
-        while (*name==' ' || *name=='\t') name++;
-        char fname[64];
-        int i = 0;
-        while (name[i] && name[i] != ' ' && name[i] != '\t') { if (i<63) { fname[i] = name[i]; i++; } else { break; } }
-        fname[i] = '\0';
-        if (i == 0) {
-            console_print("usage: cat NAME\n");
-        } else {
-            VfsFile f;
-            if (vfs_open(&g_vfs, fname, &f)) {
-                static char buf[32768];
-                uint32_t sz = f.file.size;
-                if (sz > sizeof(buf)) sz = sizeof(buf);
-                if (vfs_read(&g_vfs, &f, buf, sz)) {
-                    for (uint32_t j = 0; j < sz; j++) console_putchar(buf[j]);
-                    console_print("\n");
-                } else {
-                    console_print("read error\n");
-                }
-            } else {
-                console_print("not found\n");
-            }
-        }
-    } else if ((strlen(cmd) > 3) && cmd[0]=='v' && cmd[1]=='i' && cmd[2]=='m' && (cmd[3]==' ' || cmd[3]=='\t')) {
-        const char* name = cmd + 4; while (*name==' '||*name=='\t') name++;
-        char fname[64]; int i=0; while(name[i] && name[i]!=' ' && name[i]!='\t'){ if(i<63){fname[i]=name[i]; i++;} else break; } fname[i]='\0';
-        if(i==0){ console_print("usage: vim NAME\n"); }
-        else { vim_editor(fname); }
-    } else if ((strlen(cmd) > 5) && cmd[0]=='t' && cmd[1]=='o' && cmd[2]=='u' && cmd[3]=='c' && cmd[4]=='h' && (cmd[5]==' ' || cmd[5]=='\t')) {
-        const char* name = cmd + 6; while (*name==' '||*name=='\t') name++;
-        char fname[64]; int i=0; while(name[i] && name[i]!=' ' && name[i]!='\t'){ if(i<63){fname[i]=name[i]; i++;} else break; } fname[i]='\0';
-        if(i==0){ console_print("usage: touch NAME\n"); }
-        else { VfsFile nf; if(vfs_create(&g_vfs,fname,0,&nf)) console_print("created\n"); else console_print("create failed\n"); }
-    } else {
-        console_print("Unknown command. Type 'help'\n");
     }
 }
 
@@ -201,7 +189,7 @@ static void vim_editor(const char* name){
         char c = keyboard_getchar();
         if(!insert){
             if(c=='I' || c=='i'){ insert=1; esc_once=0; console_print("-- INSERT --\n"); continue; }
-            if(c==27){ if(esc_once){ // save and exit
+            if(c==27){ if(esc_once){
                     if(!vfs_write_file(&g_vfs,name,buf,len)) console_print("save error\n");
                     console_set_color(VGA_COLOR_LIGHT_BLUE);
                     console_print("\n+--------------------------- Saved ----------------------------+\n");
@@ -209,11 +197,68 @@ static void vim_editor(const char* name){
                 } else { esc_once=1; console_print("(ESC)\n"); }
                 continue;
             }
-            esc_once=0; // other keys ignored in normal mode
+            esc_once=0;
         } else {
             if(c==27){ insert=0; console_print("\n-- NORMAL --\n"); continue; }
             if(c=='\b'){ if(len>0){ len--; console_putchar('\b'); } continue; }
             if(len<sizeof(buf)-1){ buf[len++]=c; console_putchar(c);} 
         }
+    }
+}
+
+void process_command(const char* cmd) {
+    if (strlen(cmd) == 0) {
+        return;
+    }
+    if (strcmp(cmd, "help") == 0) {
+        show_help();
+    } else if (strcmp(cmd, "version") == 0) {
+        show_version();
+    } else if (strcmp(cmd, "about") == 0) {
+        show_about();
+    } else if (strcmp(cmd, "clear") == 0) {
+        console_clear();
+        print_banner();
+    } else if (strcmp(cmd, "ping") == 0) {
+        ping_command();
+    } else if (strcmp(cmd, "ls") == 0) {
+        vfs_ls_root(&g_vfs);
+    } else if ((strlen(cmd) > 3) && cmd[0]=='c' && cmd[1]=='a' && cmd[2]=='t' && (cmd[3]==' ' || cmd[3]=='\t')) {
+        const char* name = cmd + 4;
+        while (*name==' ' || *name=='\t') name++;
+        char fname[64];
+        int i = 0;
+        while (name[i] && name[i] != ' ' && name[i] != '\t') { if (i<63) { fname[i] = name[i]; i++; } else { break; } }
+        fname[i] = '\0';
+        if (i == 0) {
+            console_print("usage: cat NAME\n");
+        } else {
+            VfsFile f;
+            if (vfs_open(&g_vfs, fname, &f)) {
+                static char buf[32768];
+                uint32_t sz = f.file.size;
+                if (sz > sizeof(buf)) sz = sizeof(buf);
+                if (vfs_read(&g_vfs, &f, buf, sz)) {
+                    for (uint32_t j = 0; j < sz; j++) console_putchar(buf[j]);
+                    console_print("\n");
+                } else {
+                    console_print("read error\n");
+                }
+            } else {
+                console_print("not found\n");
+            }
+        }
+    } else if ((strlen(cmd) > 3) && cmd[0]=='v' && cmd[1]=='i' && cmd[2]=='m' && (cmd[3]==' ' || cmd[3]=='\t')) {
+        const char* name = cmd + 4; while (*name==' '||*name=='\t') name++;
+        char fname[64]; int i=0; while(name[i] && name[i]!=' ' && name[i]!='\t'){ if(i<63){fname[i]=name[i]; i++;} else break; } fname[i]='\0';
+        if(i==0){ console_print("usage: vim NAME\n"); }
+        else { vim_editor(fname); }
+    } else if ((strlen(cmd) > 5) && cmd[0]=='t' && cmd[1]=='o' && cmd[2]=='u' && cmd[3]=='c' && cmd[4]=='h' && (cmd[5]==' ' || cmd[5]=='\t')) {
+        const char* name = cmd + 6; while (*name==' '||*name=='\t') name++;
+        char fname[64]; int i=0; while(name[i] && name[i]!=' ' && name[i]!='\t'){ if(i<63){fname[i]=name[i]; i++;} else break; } fname[i]='\0';
+        if(i==0){ console_print("usage: touch NAME\n"); }
+        else { VfsFile nf; if(vfs_create(&g_vfs,fname,0,&nf)) console_print("created\n"); else console_print("create failed\n"); }
+    } else {
+        console_print("Unknown command. Type 'help'\n");
     }
 }

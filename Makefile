@@ -11,8 +11,8 @@ ASFLAGS = -f elf32
 LDFLAGS = -T linker.ld -nostdlib
 
 # Исходные файлы
-C_SOURCES = kernel.c console.c keyboard.c string.c serial.c vfs.c fat.c disk.c
-ASM_SOURCES = kernel_entry.asm
+C_SOURCES = kernel.c console.c keyboard.c string.c serial.c vfs.c fat.c disk.c idt.c pic.c pit.c task.c paging.c
+ASM_SOURCES = kernel_entry.asm isr.asm
 BOOT_SOURCE = boot.asm
 
 # Объектные файлы
