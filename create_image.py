@@ -75,11 +75,15 @@ def create_fat12_image():
         f.write(fat)
         root_start = reserved + fats * spf
         root = bytearray(bps)
-        name = b'HELLO   TXT'
+        name = b'CALC    ELF'
         root[0:11] = name
         root[11] = 0x20
         root[26:28] = le16(2)
-        data = b'Hello from FAT!\r\n'
+        try:
+            with open('calc.elf','rb') as cf:
+                data = cf.read()
+        except FileNotFoundError:
+            data = b'NO CALC.ELF\r\n'
         root[28:32] = le32(len(data))
         f.seek(bps * root_start)
         f.write(root)

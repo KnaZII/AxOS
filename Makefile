@@ -1,77 +1,36 @@
-# AxOS Makefile
-
-# Компиляторы и инструменты
 CC = gcc
 AS = "C:\Program Files\NASM\nasm.exe"
 LD = ld
-
-# Флаги компиляции
-CFLAGS = -m32 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -nostartfiles -nodefaultlibs -Wall -Wextra -c
+CFLAGS = -m32 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -nostartfiles -nodefaultlibs -Wall -Wextra -c -I include
 ASFLAGS = -f elf32
 LDFLAGS = -T linker.ld -nostdlib
-
-# Исходные файлы
-C_SOURCES = kernel.c console.c keyboard.c string.c serial.c vfs.c fat.c disk.c idt.c pic.c pit.c task.c paging.c
-ASM_SOURCES = kernel_entry.asm isr.asm
-BOOT_SOURCE = boot.asm
-
-# Объектные файлы
+C_SOURCES = src/kernel/kernel.c src/kernel/idt.c src/kernel/pic.c src/kernel/pit.c src/kernel/task.c src/kernel/paging.c src/kernel/syscall.c src/kernel/gdt.c src/kernel/user.c src/kernel/exec.c src/drivers/console.c src/drivers/keyboard.c src/drivers/serial.c src/drivers/disk.c src/fs/vfs.c src/fs/fat.c src/lib/string.c
+ASM_SOURCES = src/arch/x86/kernel_entry.asm src/arch/x86/isr.asm
+BOOT_SOURCE = src/arch/x86/boot.asm
 C_OBJECTS = $(C_SOURCES:.c=.o)
 ASM_OBJECTS = $(ASM_SOURCES:.asm=.o)
 BOOT_OBJECT = boot.bin
-
-# Цели
 all: axos.img
-
-# Создание образа диска
 axos.img: $(BOOT_OBJECT) kernel.bin
-	@echo "Creating disk image..."
 	python create_image.py
-
-# Сборка ядра
 kernel.bin: $(C_OBJECTS) $(ASM_OBJECTS) linker.ld
-	@echo "Linking kernel..."
 	$(CC) -m32 -nostdlib -T linker.ld -o kernel.elf $(ASM_OBJECTS) $(C_OBJECTS)
-	@echo "Converting to binary..."
 	objcopy -O binary kernel.elf kernel.bin
-
-# Компиляция C файлов
 %.o: %.c
-	@echo "Compiling $<..."
 	$(CC) $(CFLAGS) $< -o $@
-
-# Компиляция ASM файлов для ядра
 %.o: %.asm
-	@echo "Assembling $<..."
 	$(AS) $(ASFLAGS) $< -o $@
-
-# Сборка загрузчика
 $(BOOT_OBJECT): $(BOOT_SOURCE)
-	@echo "Assembling bootloader..."
 	$(AS) -f bin $(BOOT_SOURCE) -o $(BOOT_OBJECT)
-
-# Запуск в QEMU
 run: axos.img
-	@echo "Starting AxOS in QEMU..."
 	"C:\Program Files\qemu\qemu-system-i386.exe" -boot a -drive format=raw,file=axos.img,if=floppy -drive format=raw,file=fs.img,if=ide
-
-# Запуск в QEMU с отладкой
 debug: axos.img
-	@echo "Starting AxOS in QEMU with debugging..."
 	qemu-system-i386 -fda axos.img -s -S
-
-# Очистка
 clean:
-	@echo "Cleaning up..."
 	-del /Q *.o *.bin *.elf *.img 2>nul || echo "No files to clean"
-
-# Установка зависимостей (для Ubuntu/Debian)
 install-deps:
-	@echo "Installing dependencies..."
 	sudo apt-get update
 	sudo apt-get install gcc nasm qemu-system-x86 build-essential
-
-# Помощь
 help:
 	@echo "AxOS Build System"
 	@echo "Available targets:"
@@ -83,5 +42,4 @@ help:
 	@echo "  clean        - Remove all build files"
 	@echo "  install-deps - Install required dependencies"
 	@echo "  help         - Show this help message"
-
 .PHONY: all run debug clean install-deps help

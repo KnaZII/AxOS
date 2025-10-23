@@ -16,30 +16,29 @@ GLOBAL _irq8, _irq9, _irq10, _irq11, _irq12, _irq13, _irq14, _irq15
 EXTERN _isr_handler
 EXTERN _irq_handler
 EXTERN _switch_to_esp
+EXTERN _switch_to_cr3
 
-; Макросы
 %macro ISR_NOERR 1
 isr%1:
 _isr%1:
-    push dword 0         ; fake error code
-    push dword %1        ; interrupt number
+    push dword 0
+    push dword %1
     pusha
     push ds
     push es
     mov ax, 0x10
     mov ds, ax
     mov es, ax
-    mov eax, esp         ; pass esp to C as third arg
-    ; Правильный порядок аргументов: esp, err_code, int_no
-    push eax             ; esp (3rd)
-    push dword 0         ; err_code (2nd)
-    push dword %1        ; int_no (1st)
+    mov eax, esp
+    push eax
+    push dword 0
+    push dword %1
     call _isr_handler
     add esp, 12
     pop es
     pop ds
     popa
-    add esp, 8           ; drop int_no + fake err
+    add esp, 8
     iretd
 %endmacro
 
@@ -54,21 +53,19 @@ _isr%1:
     mov ds, ax
     mov es, ax
     mov eax, esp
-    ; Правильный порядок аргументов: esp, err_code, int_no
-    push eax             ; esp (3rd)
-    mov eax, [esp + 44]  ; реальный error code CPU относительно esp, без fake push
-    push eax             ; err_code (2nd)
-    push dword %1        ; int_no (1st)
+    push eax
+    mov eax, [esp + 44]
+    push eax
+    push dword %1
     call _isr_handler
     add esp, 12
     pop es
     pop ds
     popa
-    add esp, 4           ; убрать только CPU error code перед iretd
+    add esp, 4
     iretd
 %endmacro
 
-; Exceptions
 ISR_NOERR 0
 ISR_NOERR 1
 ISR_NOERR 2
@@ -102,7 +99,6 @@ ISR_NOERR 29
 ISR_NOERR 30
 ISR_NOERR 31
 
-; Общий шаблон IRQ
 %macro IRQ_STUB 1
 irq%1:
 _irq%1:
@@ -113,27 +109,30 @@ _irq%1:
     mov ds, ax
     mov es, ax
     mov eax, esp
-    add eax, 8 ; EAX points to EDI in pusha frame
-    push eax            ; esp
-    push dword (32 + %1) ; int_no
+    add eax, 8
+    push eax
+    push dword (32 + %1)
     call _irq_handler
     add esp, 8
-    ; EOI for slave if needed, then master
     %if %1 >= 8
         mov al, 0x20
         out 0xA0, al
     %endif
         mov al, 0x20
         out 0x20, al
-    ; Поправить стек сегментов
     pop es
     pop ds
-    ; Переключение стека задачи, если требуется
+    mov eax, [_switch_to_cr3]
+    test eax, eax
+    jz .no_cr3
+    mov dword [_switch_to_cr3], 0
+    mov cr3, eax
+.no_cr3:
     mov eax, [_switch_to_esp]
     test eax, eax
     jz .no_switch
     mov dword [_switch_to_esp], 0
-    mov esp, eax        ; ESP now points to EDI in saved pusha frame
+    mov esp, eax
 .no_switch:
     popa
     iretd
@@ -155,3 +154,23 @@ IRQ_STUB 12
 IRQ_STUB 13
 IRQ_STUB 14
 IRQ_STUB 15
+GLOBAL isr128
+GLOBAL _isr128
+EXTERN _syscall_handler
+
+isr128:
+_isr128:
+    pusha
+    push ds
+    push es
+    mov ax, 0x10
+    mov ds, ax
+    mov es, ax
+    mov eax, esp
+    push eax
+    call _syscall_handler
+    add esp, 4
+    pop es
+    pop ds
+    popa
+    iretd

@@ -10,12 +10,14 @@
 #include "pit.h"
 #include "task.h"
 #include "paging.h"
+#include "syscall.h"
+#include "gdt.h"
+#include "exec.h"
 
-// Включение/отключение демонстрационных задач [T1]/[T2]
 #define ENABLE_DEMO_TASKS 0
 
-static FatFs g_fat;
-static Vfs g_vfs;
+FatFs g_fat;
+Vfs g_vfs;
 
 static void vim_editor(const char* name);
 void process_command(const char* cmd);
@@ -47,16 +49,16 @@ void kernel_main() {
     console_init();
     keyboard_init();
     serial_init();
-
-    // Инициализация системных таблиц и прерываний
+    gdt_init();
     idt_init();
     pic_remap();
-    pit_init(100); // 100 Гц
+    pit_init(100);
     paging_init();
+    syscall_init();
+    syscall_setup_idt();
     task_init();
     task_register_kernel();
 
-    // Создаём две демонстрационные задачи (по желанию)
 #if ENABLE_DEMO_TASKS
     extern void task_demo1();
     extern void task_demo2();
@@ -64,7 +66,7 @@ void kernel_main() {
     task_create(task_demo2);
 #endif
 
-    __asm__ volatile("sti"); // включить прерывания
+    __asm__ volatile("sti");
 
     fat_mount(&g_fat);
     vfs_init_fat(&g_vfs, &g_fat);
@@ -73,18 +75,17 @@ void kernel_main() {
     command_loop();
 }
 
-// Демонстрационные задачи ядра
 void task_demo1(){
     while(1){
         console_print("[T1]\n");
-        task_sleep_ms(500); // 0.5 секунды
+        task_sleep_ms(500);
     }
 }
 
 void task_demo2(){
     while(1){
         console_print("[T2]\n");
-        task_sleep_ms(1000); // 1 секунда
+        task_sleep_ms(1000);
     }
 }
 
@@ -124,6 +125,7 @@ void show_help() {
     console_print("  cat NAME   - show file contents\n");
     console_print("  touch NAME - create empty file\n");
     console_print("  vim NAME   - edit/create file (I: insert, ESC: save+quit)\n");
+    console_print("  exec NAME  - load and run ELF in user mode\n");
 }
 
 void show_version() {
@@ -258,6 +260,11 @@ void process_command(const char* cmd) {
         char fname[64]; int i=0; while(name[i] && name[i]!=' ' && name[i]!='\t'){ if(i<63){fname[i]=name[i]; i++;} else break; } fname[i]='\0';
         if(i==0){ console_print("usage: touch NAME\n"); }
         else { VfsFile nf; if(vfs_create(&g_vfs,fname,0,&nf)) console_print("created\n"); else console_print("create failed\n"); }
+    } else if ((strlen(cmd) > 4) && cmd[0]=='e' && cmd[1]=='x' && cmd[2]=='e' && cmd[3]=='c' && (cmd[4]==' ' || cmd[4]=='\t')) {
+        const char* name = cmd + 5; while(*name==' '||*name=='\t') name++;
+        char fname[64]; int i=0; while(name[i] && name[i]!=' ' && name[i]!='\t'){ if(i<63){fname[i]=name[i]; i++;} else break; } fname[i]='\0';
+        if(i==0){ console_print("usage: exec NAME\n"); }
+        else { if(!exec(fname)) console_print("exec failed\n"); }
     } else {
         console_print("Unknown command. Type 'help'\n");
     }

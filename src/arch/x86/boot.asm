@@ -26,15 +26,14 @@ start:
     mov es, ax
     xor bx, bx
     
-    ; Load kernel across CHS continuously (safe upper bound)
-    mov ch, 0          ; track 0
-    mov dh, 0          ; head 0
-    mov cl, 2          ; start at sector 2 (sector 1 is boot)
+    mov ch, 0
+    mov dh, 0
+    mov cl, 2
     mov dl, [boot_drive]
 
-    mov si, 64         ; sectors to load (enough for larger kernel)
+    mov si, 64
 .load_loop:
-    mov al, 1          ; read one sector per iteration
+    mov al, 1
     call read_sectors_16
     jnc .ok_load
     jmp disk_error
@@ -45,7 +44,7 @@ start:
     jmp .advance
 .inc_es:
     mov ax, es
-    add ax, 0x20       ; 512 bytes = 32 paragraphs
+    add ax, 0x20
     mov es, ax
 .advance:
     ; advance CHS

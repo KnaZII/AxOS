@@ -39,11 +39,9 @@ void idt_init() {
     idtp.limit = sizeof(idt) - 1;
     idtp.base = (uint32_t)&idt;
 
-    // Флаги: 0x8E = Present, DPL=0, 32-bit interrupt gate
     uint8_t flags = 0x8E;
-    uint16_t sel = 0x08; // кодовый сегмент из GDT
+    uint16_t sel = 0x08;
 
-    // Исключения
     idt_set_gate(0,  (uint32_t)isr0,  sel, flags);
     idt_set_gate(1,  (uint32_t)isr1,  sel, flags);
     idt_set_gate(2,  (uint32_t)isr2,  sel, flags);
@@ -77,7 +75,6 @@ void idt_init() {
     idt_set_gate(30, (uint32_t)isr30, sel, flags);
     idt_set_gate(31, (uint32_t)isr31, sel, flags);
 
-    // IRQ (после ремапа PIC будут 32..47)
     idt_set_gate(32, (uint32_t)irq0,  sel, flags);
     idt_set_gate(33, (uint32_t)irq1,  sel, flags);
     idt_set_gate(34, (uint32_t)irq2,  sel, flags);
@@ -98,12 +95,11 @@ void idt_init() {
     idt_load();
 }
 
-// Анти-спам и дружелюбные сообщения для критических исключений
 static uint32_t gp_reported = 0;
 static uint32_t pf_reported = 0;
 
 void isr_handler(uint32_t int_no, uint32_t err_code, uint32_t esp) {
-    if (int_no == 13) { // General Protection Fault
+    if (int_no == 13) {
         if (!gp_reported) {
             uint32_t eip = *((uint32_t*)(esp + 44));
             uint32_t cs  = *((uint32_t*)(esp + 48));
@@ -120,14 +116,27 @@ void isr_handler(uint32_t int_no, uint32_t err_code, uint32_t esp) {
             console_print("\n");
             console_set_color(VGA_COLOR_LIGHT_GREY);
         }
-        gp_reported = 1; // печатаем только один раз
-        return; // не засоряем экран повторным выводом
+        gp_reported = 1;
+        return;
     }
-    if (int_no == 14) { // Page Fault
+    if (int_no == 14) {
         if (!pf_reported) {
+            uint32_t cr2;
+            __asm__ volatile("mov %%cr2, %0" : "=r"(cr2));
+            uint32_t eip = *((uint32_t*)(esp + 44));
+            uint32_t cs  = *((uint32_t*)(esp + 48));
+            uint32_t efl = *((uint32_t*)(esp + 52));
             console_set_color(VGA_COLOR_LIGHT_RED);
             console_print("Page Fault (#14), err=");
             console_print_hex(err_code);
+            console_print(" CR2=");
+            console_print_hex(cr2);
+            console_print(" EIP=");
+            console_print_hex(eip);
+            console_print(" CS=");
+            console_print_hex(cs);
+            console_print(" EFLAGS=");
+            console_print_hex(efl);
             console_print("\n");
             console_set_color(VGA_COLOR_LIGHT_GREY);
         }
@@ -135,7 +144,6 @@ void isr_handler(uint32_t int_no, uint32_t err_code, uint32_t esp) {
         return;
     }
 
-    // Остальные исключения — один раз, кратко
     static uint8_t shown[32] = {0};
     if (int_no < 32 && !shown[int_no]) {
         console_print("CPU exception: ");
