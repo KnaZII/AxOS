@@ -29,11 +29,11 @@ void print_banner() {
     console_print("+------------------------------------------------------------------------------+\n");
 
     console_set_color(VGA_COLOR_LIGHT_GREEN);
-    console_print("         ___         __   ____   ____        \n");
-    console_print("        / _ |  ___ _/ /  / __/  / __/        \n");
-    console_print("       / __ | / _ `/ /  _\\ \\   _\\ \\         \n");
-    console_print("      /_/ |_| \\_,_/_/  /___/  /___/         \n");
-    console_print("             A x O S   K e r n e l            \n");
+    console_print("  ______     __  __     ______     ______    \n");
+    console_print(" /\\  __ \\   /\\_\\_\\_\\   /\\  __ \\   /\\  ___\\   \n");
+    console_print(" \\ \\  __ \\  \\/_\\/\\_\\/_  \\ \\ \\/\\ \\  \\ \\___  \\  \n");
+    console_print("  \\ \\_\\ \\_\\   /\\_\\/\\_\\  \\ \\_____\\  \\/\\_____\\ \n");
+    console_print("   \\/_/\\/_/   \\/_/\\/_/   \\/_____/   \\/_____/\n");
 
     console_set_color(VGA_COLOR_LIGHT_BLUE);
     console_print("+------------------------------------------------------------------------------+\n");
